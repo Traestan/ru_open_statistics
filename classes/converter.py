@@ -5,24 +5,27 @@ __author__ = 'alexeyymanikin'
 
 import shutil
 import re
-import MySQLdb
 from classes.command.gunzip import Gunzip
 from classes.command.bgpdump import Bgpdump
 from helpers.helpers import *
 from config.main import *
+from helpers.helpersCollor import BColor
 
 
 class Converter(object):
 
-    def __init__(self, path, show_log=True):
+    def __init__(self, path, show_log=True, delete_work_dir=True):
         """
-        В качестве параметра передается путь до рабочей директории
-        :rtype path: unicode
+        :type path: unicode
+        :type show_log: bool
+        :type delete_work_dir: bool
+        :return:
         """
         self.path = path
         self.show_log = show_log
         self.work_path = self._create_work_dir()
         self.prefix = PREFIX_LIST
+        self.delete_work_dir = delete_work_dir
 
         for prefix in self.prefix:
             shutil.copy(os.path.join(self.path, prefix+'_domains.gz'), self.work_path)
@@ -36,7 +39,8 @@ class Converter(object):
         Подчисщаем за собой все
         :return:
         """
-        self._remove_work_dir()
+        if self.delete_work_dir:
+            self._remove_work_dir()
         self.connection.close()
 
     def get_work_path(self):
@@ -77,6 +81,7 @@ class Converter(object):
         p.run()
         p.wait(write_output_in_log=False)
         if p.process.returncode != 0:
+            BColor.error("unzip p.process.returncode = %s" % p.process.returncode)
             return False
 
         return True
