@@ -15,9 +15,13 @@ logfile = os.path.join(CURRENT_DIR, '%s.debug' % PROGRAM_NAME)
 import traceback
 import SubnetTree
 from helpers.helperUnicode import *
+from helpers.helpers import check_prog_run
 from classes.downloader import Downloader
 from classes.converter import Converter
 from classes.resolver import Resolver
+from helpers.helpersCollor import BColor
+import argparse
+
 
 def save_prefix_list(prefix_list, file_name):
     """
@@ -30,6 +34,7 @@ def save_prefix_list(prefix_list, file_name):
     for index in prefix_list:
         saved_file.write(index + '\t' + prefix_list[index] + '\n')
     saved_file.close()
+
 
 def load_prefix_list_from_file(file_name):
     """
@@ -47,6 +52,7 @@ def load_prefix_list_from_file(file_name):
 
     return subnet_list_tree
 
+
 def load_prefix_list_from_var(prefix_list):
     """
     Загрузка данных из переменной
@@ -58,37 +64,67 @@ def load_prefix_list_from_var(prefix_list):
 
     return subnet_list_tree
 
-def print_log(log_flag, text):
-    if log_flag:
-        print text
 
 if __name__ == "__main__":
-    show_log = True
     try:
-        loader = Downloader()
-        print_log(show_log, "Download files")
-        path = loader.download_data_for_current_date()
+        if check_prog_run(PROGRAM_NAME):
+            BColor.error("Program %s already running" % PROGRAM_NAME)
+            sys.exit(1)
 
-        print_log(show_log, "Unzip file")
-        converter = Converter(path)
+        parser = argparse.ArgumentParser(add_help=True, version='1.0')
 
-        print_log(show_log, "Parsing rib file")
-        converter.parce_file_rib_file_to()
+        parser.add_argument('-d', '--dir', type=str, help="Do`t download data, use exist from dir", action="store")
+        parser.add_argument('-s', '--show_verbose', help="Show verbose log", action="count")
+        parser.add_argument('-D', '--delete_old', type=bool, help="Do`t delete removed domains", action="store")
+        parser.add_argument('-n', '--name_server', type=str, help="Set name server", action="store")
+        args = parser.parse_args()
 
-        print_log(show_log, "Get AS list")
-        as_list_text = converter.convert_rib_to_net_as()
+        if args.show_verbose:
+            BColor.ok("Use verbose")
 
-        print_log(show_log, "Save AS list")
-        path_to_prefix_file = os.path.abspath(os.path.join(path, 'prefix_list'))
-        save_prefix_list(as_list_text, path_to_prefix_file)
+        if not args.dir:
+            BColor.process("Download files")
+            path = Downloader.download_data_for_current_date()
+            BColor.ok("Path to work dir %s" % path)
 
-        print_log(show_log, "Load as list")
-        as_list = load_prefix_list_from_var(as_list_text)
-        # as_list = load_prefix_list_from_file(path_to_prefix_file)
+            BColor.process("Unzip file")
+            converter = Converter(path, delete_work_dir=(not args.show_verbose))
 
-        print_log(show_log, "Start resolve")
-        Resolver.start_load_and_resolver_domain(as_list, os.path.abspath(os.path.join(path, 'work')))
+            BColor.process("Parsing rib file")
+            converter.parce_file_rib_file_to()
+
+            BColor.process("Get AS list")
+            as_list_text = converter.convert_rib_to_net_as()
+
+            BColor.process("Save AS list")
+            path_to_prefix_file = os.path.abspath(os.path.join(path, 'prefix_list'))
+            save_prefix_list(as_list_text, path_to_prefix_file)
+
+            BColor.process("Load AS list")
+            as_list = load_prefix_list_from_var(as_list_text)
+
+        else:
+            path = args.dir
+            BColor.ok("Use data path %s" % path)
+            path_to_prefix_file = os.path.abspath(os.path.join(path, 'prefix_list'))
+            as_list = load_prefix_list_from_file(path_to_prefix_file)
+
+        BColor.process("Start resolve")
+
+        delete_old = True
+        if args.delete_old:
+            BColor.ok("Not delete removed domains")
+            delete_old = False
+
+        name_server = '127.0.0.1'
+        if args.name_server:
+            BColor.ok("Use name server %s" % args.name_server)
+            name_server = args.name_server
+
+        Resolver.start_load_and_resolver_domain(as_list, os.path.abspath(os.path.join(path, 'work')),
+                                                delete_old=delete_old, verbose=args.show_verbose,
+                                                resolve_dns=name_server)
 
     except Exception as e:
-        print "Got an exception: %s" % e.message
+        BColor.error("Got an exception: %s" % e.message)
         print traceback.format_exc()
